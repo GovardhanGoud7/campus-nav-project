@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<title>Campus Navigation System</title>
+
+<style>
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #0d1117;
+    color: white;
+}
+
+header {
+    padding: 25px;
+    text-align: center;
+    background: #151b23;
+    border-bottom: 1px solid #30363d;
+}
+
+header h1 {
+    margin: 0;
+    color: #3ddc97;
+}
+
+header p {
+    color: #8b949e;
+}
+
+.container {
+    display: grid;
+    grid-template-columns: 280px 1fr 300px;
+    gap: 20px;
+    padding: 20px;
+}
+
+.panel {
+    background: #151b23;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 20px;
+}
+
+.panel h2 {
+    color: #3ddc97;
+    font-size: 18px;
+}
+
+label {
+    display: block;
+    margin-top: 15px;
+    margin-bottom: 6px;
+    color: #8b949e;
+}
+
+select {
+    width: 100%;
+    padding: 10px;
+    background: #21262d;
+    color: white;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+}
+
+button {
+    width: 100%;
+    padding: 12px;
+    margin-top: 20px;
+    border: none;
+    border-radius: 7px;
+    background: #3ddc97;
+    color: #0d1117;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button:hover {
+    opacity: 0.85;
+}
+
+.result {
+    margin-top: 20px;
+    padding: 15px;
+    background: #21262d;
+    border-radius: 8px;
+}
+
+.distance {
+    font-size: 25px;
+    color: #3ddc97;
+    font-weight: bold;
+}
+
+#directions {
+    margin-top: 10px;
+}
+
+.step {
+    padding: 10px;
+    margin-bottom: 8px;
+    background: #21262d;
+    border-radius: 6px;
+}
+
+.map {
+    overflow: auto;
+}
+
+svg {
+    width: 100%;
+    min-width: 600px;
+}
+
+.edge {
+    stroke: #30363d;
+    stroke-width: 3;
+}
+
+.path {
+    stroke: #3ddc97;
+    stroke-width: 5;
+}
+
+.node {
+    fill: #21262d;
+    stroke: #4fa8e0;
+    stroke-width: 3;
+}
+
+.room {
+    stroke: #b57edc;
+}
+
+.stair {
+    stroke: #f0a63a;
+}
+
+.active {
+    fill: #3ddc97;
+    stroke: #3ddc97;
+}
+
+.node-label {
+    fill: #8b949e;
+    font-size: 11px;
+}
+
+.active-label {
+    fill: white;
+    font-weight: bold;
+}
+
+.building {
+    fill: #151b23;
+    stroke: #30363d;
+    stroke-dasharray: 5 5;
+}
+
+@media(max-width: 1000px) {
+
+    .container {
+        grid-template-columns: 1fr;
+    }
+
+}
+
+</style>
+</head>
+
+<body>
+
+<header>
+
+<h1>🧭 Campus Navigation System</h1>
+
+<p>
+Indoor + Outdoor Campus Route Planning using Dijkstra's Algorithm
+</p>
+
+</header>
+
+
+<div class="container">
+
+<!-- LEFT PANEL -->
+
+<div class="panel">
+
+<h2>Plan Route</h2>
+
+<label>From</label>
+
+<select id="fromSelect"></select>
+
+
+<label>To</label>
+
+<select id="toSelect"></select>
+
+
+<button onclick="computeRoute()">
+Find Shortest Route
+</button>
+
+
+<div class="result" id="resultBox">
+
+<div class="distance" id="distance">
+-
+</div>
+
+<p id="time">
+Select locations and find a route.
+</p>
+
+</div>
+
+</div>
+
+
+<!-- MAP -->
+
+<div class="panel map">
+
+<h2>Campus Map</h2>
+
+<svg id="map" viewBox="0 0 800 520">
+
+<!-- Buildings -->
+
+<rect
+x="300"
+y="30"
+width="250"
+height="400"
+rx="10"
+class="building"
+/>
+
+<text
+x="320"
+y="55"
+fill="#8b949e"
+>
+LIBRARY BUILDING
+</text>
+
+
+<rect
+x="600"
+y="70"
+width="170"
+height="350"
+rx="10"
+class="building"
+/>
+
+<text
+x="620"
+y="95"
+fill="#8b949e"
+>
+ADMIN BUILDING
+</text>
+
+</svg>
+
+</div>
+
+
+<!-- DIRECTIONS -->
+
+<div class="panel">
+
+<h2>Turn-by-Turn Directions</h2>
+
+<div id="directions">
+
+<p style="color:#8b949e;">
+Choose starting point and destination.
+</p>
+
+</div>
+
+</div>
+
+</div>
+
+
+<script>
+
+/* =========================
+   CAMPUS GRAPH
+========================= */
+
+const GRAPH = {
+
+"Main Gate": {
+    "Parking Area": 40,
+    "Canteen": 60
+},
+
+"Parking Area": {
+    "Main Gate": 40,
+    "Central Plaza": 50
+},
+
+"Central Plaza": {
+    "Parking Area": 50,
+    "Library Entrance": 35,
+    "Admin Entrance": 45,
+    "Canteen": 30
+},
+
+"Canteen": {
+    "Main Gate": 60,
+    "Central Plaza": 30
+},
+
+"Library Entrance": {
+    "Central Plaza": 35,
+    "Library Hallway A": 15
+},
+
+"Library Hallway A": {
+    "Library Entrance": 15,
+    "Room L101": 10,
+    "Room L102": 12,
+    "Staircase L": 8
+},
+
+"Room L101": {
+    "Library Hallway A": 10
+},
+
+"Room L102": {
+    "Library Hallway A": 12
+},
+
+"Staircase L": {
+    "Library Hallway A": 8,
+    "Library Hallway B": 10
+},
+
+"Library Hallway B": {
+    "Staircase L": 10,
+    "Room L201": 9,
+    "Room L202": 11
+},
+
+"Room L201": {
+    "Library Hallway B": 9
+},
+
+"Room L202": {
+    "Library Hallway B": 11
+},
+
+"Admin Entrance": {
+    "Central Plaza": 45,
+    "Admin Hallway A": 14
+},
+
+"Admin Hallway A": {
+    "Admin Entrance": 14,
+    "Room A101": 9,
+    "Staircase A": 10
+},
+
+"Room A101": {
+    "Admin Hallway A": 9
+},
+
+"Staircase A": {
+    "Admin Hallway A": 10,
+    "Admin Hallway B": 9
+},
+
+"Admin Hallway B": {
+    "Staircase A": 9,
+    "Room A201": 8,
+    "Room A202": 10
+},
+
+"Room A201": {
+    "Admin Hallway B": 8
+},
+
+"Room A202": {
+    "Admin Hallway B": 10
+}
+
+};
+
+
+/* =========================
+   FRIENDLY ROOM NAMES
+========================= */
+
+const FRIENDLY = {
+
+"Room L101": "Room L101 - Reading Hall",
+
+"Room L102": "Room L102 - Reference Section",
+
+"Room L201": "Room L201 - Digital Library",
+
+"Room L202": "Room L202 - Study Pods",
+
+"Room A101": "Room A101 - Exam Cell",
+
+"Room A201": "Room A201 - Principal Office",
+
+"Room A202": "Room A202 - Accounts Office"
+
+};
+
+
+/* =========================
+   MAP POSITIONS
+========================= */
+
+const POS = {
+
+"Main Gate": [60,460],
+
+"Parking Area": [170,460],
+
+"Canteen": [60,340],
+
+"Central Plaza": [280,400],
+
+"Library Entrance": [420,400],
+
+"Library Hallway A": [420,300],
+
+"Room L101": [340,230],
+
+"Room L102": [500,230],
+
+"Staircase L": [420,200],
+
+"Library Hallway B": [420,110],
+
+"Room L201": [340,50],
+
+"Room L202": [500,50],
+
+"Admin Entrance": [600,400],
+
+"Admin Hallway A": [660,300],
+
+"Room A101": [660,220],
+
+"Staircase A": [720,300],
+
+"Admin Hallway B": [720,180],
+
+"Room A201": [680,90],
+
+"Room A202": [760,90]
+
+};
+
+
+/* =========================
+   CREATE DROPDOWNS
+========================= */
+
+function loadLocations() {
+
+    const from = document.getElementById("fromSelect");
+
+    const to = document.getElementById("toSelect");
+
+    Object.keys(GRAPH).forEach(function(node) {
+
+        let name = FRIENDLY[node] || node;
+
+        from.innerHTML +=
+        `<option value="${node}">${name}</option>`;
+
+        to.innerHTML +=
+        `<option value="${node}">${name}</option>`;
+
+    });
+
+    from.value = "Main Gate";
+
+    to.value = "Room L201";
+
+}
+
+
+/* =========================
+   DIJKSTRA ALGORITHM
+========================= */
+
+function dijkstra(graph, start, end) {
+
+    let distance = {};
+
+    let previous = {};
+
+    let visited = new Set();
+
+    Object.keys(graph).forEach(function(node) {
+
+        distance[node] = Infinity;
+
+    });
+
+    distance[start] = 0;
+
+    let queue = [[0, start]];
+
+
+    while(queue.length > 0) {
+
+        queue.sort(function(a,b) {
+            return a[0] - b[0];
+        });
+
+        let current = queue.shift();
+
+        let currentDistance = current[0];
+
+        let currentNode = current[1];
+
+
+        if(visited.has(currentNode)) {
+            continue;
+        }
+
+        visited.add(currentNode);
+
+
+        if(currentNode === end) {
+            break;
+        }
+
+
+        for(let neighbor in graph[currentNode]) {
+
+            let weight = graph[currentNode][neighbor];
+
+            let newDistance =
+                currentDistance + weight;
+
+
+            if(newDistance < distance[neighbor]) {
+
+                distance[neighbor] = newDistance;
+
+                previous[neighbor] = currentNode;
+
+                queue.push([
+                    newDistance,
+                    neighbor
+                ]);
+
+            }
+
+        }
+
+    }
+
+
+    if(distance[end] === Infinity) {
+
+        return [null, []];
+
+    }
+
+
+    let path = [];
+
+    let current = end;
+
+
+    while(current !== undefined) {
+
+        path.unshift(current);
+
+        current = previous[current];
+
+    }
+
+
+    return [distance[end], path];
+
+}
+
+
+/* =========================
+   DIRECTIONS
+========================= */
+
+function createDirections(path) {
+
+    let directions = [];
+
+    directions.push(
+        "Start at " +
+        (FRIENDLY[path[0]] || path[0]) +
+        "."
+    );
+
+
+    for(let i = 1; i < path.length; i++) {
+
+        let node = path[i];
+
+        let name = FRIENDLY[node] || node;
+
+
+        if(node.startsWith("Staircase")) {
+
+            directions.push(
+                "Go to " +
+                name +
+                " and go up to the next floor."
+            );
+
+        }
+
+        else if(node.includes("Entrance")) {
+
+            directions.push(
+                "Walk to " +
+                name +
+                " and enter the building."
+            );
+
+        }
+
+        else if(node.startsWith("Room")) {
+
+            directions.push(
+                "Arrive at " +
+                name +
+                "."
+            );
+
+        }
+
+        else {
+
+            directions.push(
+                "Continue to " +
+                name +
+                "."
+            );
+
+        }
+
+    }
+
+
+    return directions;
+
+}
+
+
+/* =========================
+   DRAW MAP
+========================= */
+
+function drawMap(route) {
+
+    const svg = document.getElementById("map");
+
+    let html = `
+
+    <rect
+    x="300"
+    y="30"
+    width="250"
+    height="400"
+    rx="10"
+    class="building"
+    />
+
+    <text
+    x="320"
+    y="55"
+    fill="#8b949e">
+    LIBRARY BUILDING
+    </text>
+
+
+    <rect
+    x="600"
+    y="70"
+    width="170"
+    height="350"
+    rx="10"
+    class="building"
+    />
+
+    <text
+    x="620"
+    y="95"
+    fill="#8b949e">
+    ADMIN BUILDING
+    </text>
+
+    `;
+
+
+    let routeSet = new Set();
+
+
+    if(route) {
+
+        for(let i = 0; i < route.length - 1; i++) {
+
+            routeSet.add(
+                route[i] + "|" + route[i+1]
+            );
+
+            routeSet.add(
+                route[i+1] + "|" + route[i]
+            );
+
+        }
+
+    }
+
+
+    let drawn = new Set();
+
+
+    for(let node in GRAPH) {
+
+        for(let neighbor in GRAPH[node]) {
+
+            let key = [node, neighbor]
+                .sort()
+                .join("|");
+
+
+            if(drawn.has(key)) {
+
+                continue;
+
+            }
+
+
+            drawn.add(key);
+
+
+            let x1 = POS[node][0];
+
+            let y1 = POS[node][1];
+
+            let x2 = POS[neighbor][0];
+
+            let y2 = POS[neighbor][1];
+
+
+            let pathClass =
+                routeSet.has(node + "|" + neighbor)
+                ? "path"
+                : "edge";
+
+
+            html += `
+
+            <line
+            x1="${x1}"
+            y1="${y1}"
+            x2="${x2}"
+            y2="${y2}"
+            class="${pathClass}"
+            />
+
+            `;
+
+        }
+
+    }
+
+
+    let routeNodes =
+        new Set(route || []);
+
+
+    for(let node in POS) {
+
+        let x = POS[node][0];
+
+        let y = POS[node][1];
+
+
+        let className = "node";
+
+
+        if(node.startsWith("Room")) {
+
+            className += " room";
+
+        }
+
+        if(node.startsWith("Staircase")) {
+
+            className += " stair";
+
+        }
+
+        if(routeNodes.has(node)) {
+
+            className += " active";
+
+        }
+
+
+        html += `
+
+        <circle
+        cx="${x}"
+        cy="${y}"
+        r="7"
+        class="${className}"
+        />
+
+        <text
+        x="${x + 10}"
+        y="${y + 4}"
+        class="node-label ${
+            routeNodes.has(node)
+            ? "active-label"
+            : ""
+        }">
+
+        ${node}
+
+        </text>
+
+        `;
+
+    }
+
+
+    svg.innerHTML = html;
+
+}
+
+
+/* =========================
+   FIND ROUTE
+========================= */
+
+function computeRoute() {
+
+    const start =
+        document.getElementById("fromSelect").value;
+
+
+    const end =
+        document.getElementById("toSelect").value;
+
+
+    const result =
+        dijkstra(GRAPH, start, end);
+
+
+    const distance = result[0];
+
+    const path = result[1];
+
+
+    if(distance === null) {
+
+        document.getElementById("distance")
+        .textContent = "No Route";
+
+
+        document.getElementById("time")
+        .textContent = "No path available.";
+
+
+        document.getElementById("directions")
+        .innerHTML =
+        "<p>No route found.</p>";
+
+
+        drawMap(null);
+
+        return;
+
+    }
+
+
+    document.getElementById("distance")
+    .textContent =
+    distance + " meters";
+
+
+    let minutes =
+        Math.max(1, Math.round(distance / 80));
+
+
+    document.getElementById("time")
+    .textContent =
+    "Estimated walking time: " +
+    minutes +
+    " minute(s)";
+
+
+    const directions =
+        createDirections(path);
+
+
+    let html = "";
+
+
+    directions.forEach(function(direction, index) {
+
+        html += `
+
+        <div class="step">
+
+        <b>${index + 1}.</b>
+
+        ${direction}
+
+        </div>
+
+        `;
+
+    });
+
+
+    document.getElementById("directions")
+    .innerHTML = html;
+
+
+    drawMap(path);
+
+}
+
+
+/* =========================
+   START APPLICATION
+========================= */
+
+loadLocations();
+
+drawMap(null);
+
+computeRoute();
+
+</script>
+
+</body>
+</html>
